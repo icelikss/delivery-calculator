@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Local B2B Delivery Price Calculator</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #f5f5f7;
+    }
+
+    .container {
+      max-width: 600px;
+      margin: 40px auto;
+      background: #ffffff;
+      padding: 24px;
+      border-radius: 16px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+    }
+
+    h1 {
+      font-size: 1.6rem;
+      margin-top: 0;
+      margin-bottom: 8px;
+    }
+
+    p.subtitle {
+      margin-top: 0;
+      margin-bottom: 20px;
+      color: #555;
+      font-size: 0.95rem;
+    }
+
+    .field {
+      margin-bottom: 14px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 4px;
+      font-weight: 500;
+      font-size: 0.95rem;
+    }
+
+    input, select {
+      width: 100%;
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      font-size: 0.95rem;
+      box-sizing: border-box;
+    }
+
+    input:focus, select:focus {
+      outline: none;
+      border-color: #007aff;
+      box-shadow: 0 0 0 2px rgba(0,122,255,0.15);
+    }
+
+    .hint {
+      font-size: 0.8rem;
+      color: #777;
+    }
+
+    button {
+      margin-top: 8px;
+      padding: 10px 16px;
+      border-radius: 999px;
+      border: none;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      background: #007aff;
+      color: #fff;
+    }
+
+    button:hover {
+      opacity: 0.9;
+    }
+
+    .result {
+      margin-top: 20px;
+      padding: 14px 16px;
+      border-radius: 12px;
+      background: #f0f4ff;
+      font-size: 0.95rem;
+    }
+
+    .result h2 {
+      margin: 0 0 6px 0;
+      font-size: 1.2rem;
+    }
+
+    .error {
+      margin-top: 10px;
+      color: #b3261e;
+      font-size: 0.9rem;
+    }
+
+    .small {
+      font-size: 0.8rem;
+      color: #555;
+      margin-top: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Local B2B Delivery Price Calculator</h1>
+    <p class="subtitle">Enter ZIP or distance, pallet/box count, and get an instant quote.</p>
+
+    <form id="priceForm">
+      <div class="field">
+        <label for="zip">ZIP code (optional)</label>
+        <input id="zip" type="text" placeholder="e.g. 07001" />
+        <div class="hint">If ZIP is filled and mapped, it will override manual distance.</div>
+      </div>
+
+      <div class="field">
+        <label for="distance">Distance in miles (if no ZIP)</label>
+        <input id="distance" type="number" min="0" step="0.1" placeholder="e.g. 18" />
+      </div>
+
+      <div class="field">
+        <label for="mode">Mode</label>
+        <select id="mode">
+          <option value="pallet">Pallet</option>
+          <option value="box">Box</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="qty">Quantity (pallets or boxes)</label>
+        <input id="qty" type="number" min="0" step="1" placeholder="e.g. 4" />
+      </div>
+
+      <div class="field">
+        <label for="boxesPerPallet">Boxes per pallet (used only in Box mode)</label>
+        <input id="boxesPerPallet" type="number" min="1" step="1" value="20" />
+        <div class="hint">Boxes ÷ BoxesPerPallet = pallet equivalents.</div>
+      </div>
+
+      <button type="submit">Calculate Price</button>
+      <div id="error" class="error"></div>
+    </form>
+
+    <div id="result" class="result" style="display:none;"></div>
+
+    <div class="small">
+      Pricing demo only – adjust numbers in the script to match your real tariff.
+    </div>
+  </div>
+
+  <script>
+    // --- SETTINGS (tune these to your real numbers) ---
+    const SETTINGS = {
+      baseFee: 40,              // per trip
+      firstPalletRate: 35,      // first pallet
+      additionalPalletRate: 25, // each extra pallet
+      freeMiles: 10,            // miles included in base
+      ratePerExtraMile: 1.5,    // per mile after freeMiles
+      defaultBoxesPerPallet: 20
+    };
+
+    // Simple ZIP -> distance map (example only, add your real data)
+    const ZIP_DISTANCES = {
+      "07001": 5,
+      "07002": 9,
+      "07003": 14
+      // Add more: "ZIP": distanceInMiles
+    };
+
+    const form = document.getElementById("priceForm");
+    const resultEl = document.getElementById("result");
+    const errorEl = document.getElementById("error");
+
+    form.addEventListener("submit", function (e) {
+      e.preventDefault();
+      errorEl.textContent = "";
+      resultEl.style.display = "none";
+      resultEl.innerHTML = "";
+
+      const zip = document.getElementById("zip").value.trim();
+      const distanceInput = parseFloat(document.getElementById("distance").value) || 0;
+      const mode = document.getElementById("mode").value;
+      const qty = parseFloat(document.getElementById("qty").value) || 0;
+      const boxesPerPalletInput = parseFloat(document.getElementById("boxesPerPallet").value) || SETTINGS.defaultBoxesPerPallet;
+
+      // Basic validation
+      if (!zip && distanceInput <= 0) {
+        errorEl.textContent = "Please enter a ZIP code or a positive distance.";
+        return;
+      }
+      if (qty <= 0) {
+        errorEl.textContent = "Quantity must be greater than 0.";
+        return;
+      }
+
+      // Determine distance
+      let usedDistance = distanceInput;
+      if (zip && ZIP_DISTANCES[zip] !== undefined) {
+        usedDistance = ZIP_DISTANCES[zip];
+      }
+
+      // Pallet equivalents
+      let palletEquivalents = 0;
+      if (mode === "pallet") {
+        palletEquivalents = qty;
+      } else if (mode === "box") {
+        palletEquivalents = qty / boxesPerPalletInput;
+      }
+
+      if (palletEquivalents <= 0) {
+        errorEl.textContent = "Calculated pallet equivalents is zero. Check quantity and boxes per pallet.";
+        return;
+      }
+
+      // Pallet charge
+      let palletCharge = 0;
+      if (palletEquivalents > 0) {
+        // First pallet @ firstPalletRate, remaining @ additionalPalletRate
+        const extraPallets = Math.max(palletEquivalents - 1, 0);
+        palletCharge = SETTINGS.firstPalletRate + extraPallets * SETTINGS.additionalPalletRate;
+      }
+
+      // Distance surcharge
+      let distanceSurcharge = 0;
+      if (usedDistance > SETTINGS.freeMiles) {
+        distanceSurcharge = (usedDistance - SETTINGS.freeMiles) * SETTINGS.ratePerExtraMile;
+      }
+
+      const total = SETTINGS.baseFee + palletCharge + distanceSurcharge;
+
+      resultEl.style.display = "block";
+      resultEl.innerHTML = `
+        <h2>Total: $${total.toFixed(2)}</h2>
+        <div>Distance used: <strong>${usedDistance.toFixed(1)} mi</strong></div>
+        <div>Pallet equivalents: <strong>${palletEquivalents.toFixed(2)}</strong></div>
+        <div>Base fee: $${SETTINGS.baseFee.toFixed(2)}</div>
+        <div>Pallet charge: $${palletCharge.toFixed(2)}</div>
+        <div>Distance surcharge: $${distanceSurcharge.toFixed(2)}</div>
+      `;
+    });
+  </script>
+</body>
+</html>
