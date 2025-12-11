@@ -52,7 +52,7 @@
       font-size: 0.95rem;
     }
 
-    input, select {
+    input {
       width: 100%;
       padding: 8px 10px;
       border-radius: 8px;
@@ -61,7 +61,7 @@
       box-sizing: border-box;
     }
 
-    input:focus, select:focus {
+    input:focus {
       outline: none;
       border-color: #007aff;
       box-shadow: 0 0 0 2px rgba(0,122,255,0.15);
@@ -126,18 +126,17 @@
 
     <form id="priceForm">
       <div class="field">
-        <label for="zip">Delivery ZIP code (optional)</label>
+        <label for="zip">Delivery ZIP code</label>
         <input id="zip" type="text" placeholder="e.g. 07001" />
         <div class="hint">
-          If ZIP is filled and mapped, distance is calculated from 07424 automatically.
-          If ZIP is not recognized, please enter distance manually.
+          Distance will be calculated from 07424 using Google Maps.
         </div>
       </div>
 
       <div class="field">
-        <label for="distance">Distance in miles (if ZIP not mapped)</label>
+        <label for="distance">Distance in miles (optional override)</label>
         <input id="distance" type="number" min="0" step="0.1" placeholder="e.g. 18" />
-        <div class="hint">Use this if the delivery ZIP is not configured yet.</div>
+        <div class="hint">If entered, this will be used only if ZIP distance lookup fails.</div>
       </div>
 
       <div class="field">
@@ -159,28 +158,52 @@
   <script>
     // --- SETTINGS (adjust these to your real numbers) ---
     const SETTINGS = {
-      minDeliveryCharge: 50,   // Minimum total charge per trip
-      firstPalletRate: 40,     // First pallet
+      originZip: "07424",       // Warehouse ZIP
+      minDeliveryCharge: 50,    // Minimum total charge per trip
+      firstPalletRate: 40,      // First pallet
       additionalPalletRate: 30, // Each additional pallet
-      freeMiles: 5,            // Miles included
-      ratePerExtraMile: 2      // $ per mile after freeMiles
+      freeMiles: 5,             // Miles included
+      ratePerExtraMile: 2       // $ per mile after freeMiles
     };
 
-    // Simple ZIP -> distance map (DISTANCE FROM 07424 in miles, approximate).
-    // Edit these values as you like.
-    const ZIP_DISTANCES = {
-      "07424": 0,
-      "07001": 35,
-      "07002": 30,
-      "07003": 20
-      // Add more: "ZIP": distanceInMiles
-    };
+    // TODO: replace with your real API key
+    const GOOGLE_API_KEY = "AIzaSyAsZfyWTJ1xD5NAHATn9k3CuhXnqImfsts";
 
     const form = document.getElementById("priceForm");
     const resultEl = document.getElementById("result");
     const errorEl = document.getElementById("error");
 
-    form.addEventListener("submit", function (e) {
+    async function getDistanceFromGoogle(originZip, destZip) {
+      const url =
+        "https://maps.googleapis.com/maps/api/distancematrix/json" +
+        `?units=imperial&origins=${encodeURIComponent(originZip)}` +
+        `&destinations=${encodeURIComponent(destZip)}` +
+        `&key=${GOOGLE_API_KEY}`;
+
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error("API request failed with status " + response.status);
+      }
+
+      const data = await response.json();
+
+      if (
+        data.status !== "OK" ||
+        !data.rows ||
+        !data.rows[0] ||
+        !data.rows[0].elements ||
+        !data.rows[0].elements[0] ||
+        data.rows[0].elements[0].status !== "OK"
+      ) {
+        throw new Error("No valid distance result from API.");
+      }
+
+      const meters = data.rows[0].elements[0].distance.value;
+      const miles = meters / 1609.34;
+      return miles;
+    }
+
+    form.addEventListener("submit", async function (e) {
       e.preventDefault();
       errorEl.textContent = "";
       resultEl.style.display = "none";
@@ -200,24 +223,28 @@
         return;
       }
 
-      // Determine distance
       let usedDistance = 0;
       let distanceSource = "";
 
-      if (zip) {
-        if (ZIP_DISTANCES[zip] !== undefined) {
-          usedDistance = ZIP_DISTANCES[zip];
-          distanceSource = "ZIP mapping";
+      try {
+        if (zip) {
+          // Try Google Distance Matrix first
+          usedDistance = await getDistanceFromGoogle(SETTINGS.originZip, zip);
+          distanceSource = "Google Maps (driving distance)";
         } else if (distanceInput > 0) {
           usedDistance = distanceInput;
-          distanceSource = "manual distance (ZIP not mapped)";
+          distanceSource = "manual distance";
+        }
+      } catch (err) {
+        console.error(err);
+        if (distanceInput > 0) {
+          usedDistance = distanceInput;
+          distanceSource = "manual distance (Google API failed)";
         } else {
-          errorEl.textContent = "ZIP code not found in mapping. Please enter the distance in miles.";
+          errorEl.textContent =
+            "Could not get distance from Google Maps. Please enter the distance in miles manually.";
           return;
         }
-      } else {
-        usedDistance = distanceInput;
-        distanceSource = "manual distance";
       }
 
       // Pallet equivalents (only pallets now)
@@ -243,7 +270,7 @@
       resultEl.style.display = "block";
       resultEl.innerHTML = `
         <h2>Total: $${total.toFixed(2)}</h2>
-        <div>Distance used: <strong>${usedDistance.toFixed(1)} mi</strong> (${distanceSource})</div>
+        <div>Distance used: <strong>${usedDistance.toFixed(1)} mi</strong> (${distanceSource || "n/a"})</div>
         <div>Pallets: <strong>${palletEquivalents.toFixed(0)}</strong></div>
         <div>Pallet charge: $${palletCharge.toFixed(2)}</div>
         <div>Distance surcharge: $${distanceSurcharge.toFixed(2)}</div>
