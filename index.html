@@ -147,8 +147,7 @@
       freeMiles: 5,
       ratePerExtraMile: 2,
       nycSurcharge: 80,           // Manhattan + all NYC boroughs + Long Island
-      nonNYCToll: 20,             // Flat toll for non-NYC trips (adjust as needed)
-      noDockSurcharge: 15         // Applied when NO loading dock available
+      noDockSurcharge: 10        // Applied when NO loading dock available
     };
 
     const form = document.getElementById("priceForm");
@@ -263,9 +262,6 @@
       // NYC / Long Island surcharge
       const nycFlag = isNYCSurcharge(zip);
       const nycSurcharge = nycFlag ? SETTINGS.nycSurcharge : 0;
-
-      // Toll: applied only if NOT NYC (NYC surcharge assumed to include tolls)
-      const tollSurcharge = nycFlag ? 0 : SETTINGS.nonNYCToll;
 
       // No-dock surcharge
       const noDockSurcharge = dockAvailable ? 0 : SETTINGS.noDockSurcharge;
