@@ -24,14 +24,21 @@
     h1 {
       font-size: 1.6rem;
       margin-top: 0;
-      margin-bottom: 8px;
+      margin-bottom: 4px;
     }
 
     p.subtitle {
       margin-top: 0;
-      margin-bottom: 20px;
+      margin-bottom: 8px;
       color: #555;
       font-size: 0.95rem;
+    }
+
+    p.meta {
+      margin-top: 0;
+      margin-bottom: 20px;
+      color: #777;
+      font-size: 0.8rem;
     }
 
     .field {
@@ -110,37 +117,32 @@
 <body>
   <div class="container">
     <h1>Local B2B Delivery Price Calculator</h1>
-    <p class="subtitle">Enter ZIP or distance, pallet/box count, and get an instant quote.</p>
+    <p class="subtitle">End-to-end pallet delivery from ZIP 07424.</p>
+    <p class="meta">
+      Minimum delivery charge: <strong>$50</strong>. First pallet: <strong>$40</strong>, additional pallets: <strong>$30</strong>.
+      First <strong>5 miles free</strong>, then <strong>$2/mile</strong>. Price is for transportation only and
+      <strong>does not include unloading of boxes or inside delivery</strong>.
+    </p>
 
     <form id="priceForm">
       <div class="field">
-        <label for="zip">ZIP code (optional)</label>
+        <label for="zip">Delivery ZIP code (optional)</label>
         <input id="zip" type="text" placeholder="e.g. 07001" />
-        <div class="hint">If ZIP is filled and mapped, it will override manual distance.</div>
+        <div class="hint">
+          If ZIP is filled and mapped, distance is calculated from 07424 automatically.
+          If ZIP is not recognized, please enter distance manually.
+        </div>
       </div>
 
       <div class="field">
-        <label for="distance">Distance in miles (if no ZIP)</label>
+        <label for="distance">Distance in miles (if ZIP not mapped)</label>
         <input id="distance" type="number" min="0" step="0.1" placeholder="e.g. 18" />
+        <div class="hint">Use this if the delivery ZIP is not configured yet.</div>
       </div>
 
       <div class="field">
-        <label for="mode">Mode</label>
-        <select id="mode">
-          <option value="pallet">Pallet</option>
-          <option value="box">Box</option>
-        </select>
-      </div>
-
-      <div class="field">
-        <label for="qty">Quantity (pallets or boxes)</label>
-        <input id="qty" type="number" min="0" step="1" placeholder="e.g. 4" />
-      </div>
-
-      <div class="field">
-        <label for="boxesPerPallet">Boxes per pallet (used only in Box mode)</label>
-        <input id="boxesPerPallet" type="number" min="1" step="1" value="20" />
-        <div class="hint">Boxes ÷ BoxesPerPallet = pallet equivalents.</div>
+        <label for="qty">Quantity (pallets)</label>
+        <input id="qty" type="number" min="1" step="1" placeholder="e.g. 4" />
       </div>
 
       <button type="submit">Calculate Price</button>
@@ -150,26 +152,27 @@
     <div id="result" class="result" style="display:none;"></div>
 
     <div class="small">
-      Pricing demo only – adjust numbers in the script to match your real tariff.
+      Internal calculator – for guidance only. Tariffs may change. Transportation only; unloading not included.
     </div>
   </div>
 
   <script>
-    // --- SETTINGS (tune these to your real numbers) ---
+    // --- SETTINGS (adjust these to your real numbers) ---
     const SETTINGS = {
-      baseFee: 40,              // per trip
-      firstPalletRate: 35,      // first pallet
-      additionalPalletRate: 25, // each extra pallet
-      freeMiles: 10,            // miles included in base
-      ratePerExtraMile: 1.5,    // per mile after freeMiles
-      defaultBoxesPerPallet: 20
+      minDeliveryCharge: 50,   // Minimum total charge per trip
+      firstPalletRate: 40,     // First pallet
+      additionalPalletRate: 30, // Each additional pallet
+      freeMiles: 5,            // Miles included
+      ratePerExtraMile: 2      // $ per mile after freeMiles
     };
 
-    // Simple ZIP -> distance map (example only, add your real data)
+    // Simple ZIP -> distance map (DISTANCE FROM 07424 in miles, approximate).
+    // Edit these values as you like.
     const ZIP_DISTANCES = {
-      "07001": 5,
-      "07002": 9,
-      "07003": 14
+      "07424": 0,
+      "07001": 35,
+      "07002": 30,
+      "07003": 20
       // Add more: "ZIP": distanceInMiles
     };
 
@@ -185,43 +188,44 @@
 
       const zip = document.getElementById("zip").value.trim();
       const distanceInput = parseFloat(document.getElementById("distance").value) || 0;
-      const mode = document.getElementById("mode").value;
       const qty = parseFloat(document.getElementById("qty").value) || 0;
-      const boxesPerPalletInput = parseFloat(document.getElementById("boxesPerPallet").value) || SETTINGS.defaultBoxesPerPallet;
 
       // Basic validation
       if (!zip && distanceInput <= 0) {
-        errorEl.textContent = "Please enter a ZIP code or a positive distance.";
+        errorEl.textContent = "Please enter a delivery ZIP code or a positive distance.";
         return;
       }
       if (qty <= 0) {
-        errorEl.textContent = "Quantity must be greater than 0.";
+        errorEl.textContent = "Pallet quantity must be at least 1.";
         return;
       }
 
       // Determine distance
-      let usedDistance = distanceInput;
-      if (zip && ZIP_DISTANCES[zip] !== undefined) {
-        usedDistance = ZIP_DISTANCES[zip];
+      let usedDistance = 0;
+      let distanceSource = "";
+
+      if (zip) {
+        if (ZIP_DISTANCES[zip] !== undefined) {
+          usedDistance = ZIP_DISTANCES[zip];
+          distanceSource = "ZIP mapping";
+        } else if (distanceInput > 0) {
+          usedDistance = distanceInput;
+          distanceSource = "manual distance (ZIP not mapped)";
+        } else {
+          errorEl.textContent = "ZIP code not found in mapping. Please enter the distance in miles.";
+          return;
+        }
+      } else {
+        usedDistance = distanceInput;
+        distanceSource = "manual distance";
       }
 
-      // Pallet equivalents
-      let palletEquivalents = 0;
-      if (mode === "pallet") {
-        palletEquivalents = qty;
-      } else if (mode === "box") {
-        palletEquivalents = qty / boxesPerPalletInput;
-      }
-
-      if (palletEquivalents <= 0) {
-        errorEl.textContent = "Calculated pallet equivalents is zero. Check quantity and boxes per pallet.";
-        return;
-      }
+      // Pallet equivalents (only pallets now)
+      const palletEquivalents = qty;
 
       // Pallet charge
       let palletCharge = 0;
       if (palletEquivalents > 0) {
-        // First pallet @ firstPalletRate, remaining @ additionalPalletRate
         const extraPallets = Math.max(palletEquivalents - 1, 0);
         palletCharge = SETTINGS.firstPalletRate + extraPallets * SETTINGS.additionalPalletRate;
       }
@@ -232,16 +236,28 @@
         distanceSurcharge = (usedDistance - SETTINGS.freeMiles) * SETTINGS.ratePerExtraMile;
       }
 
-      const total = SETTINGS.baseFee + palletCharge + distanceSurcharge;
+      const subtotal = palletCharge + distanceSurcharge;
+      const total = Math.max(subtotal, SETTINGS.minDeliveryCharge);
+      const minApplied = total > subtotal;
 
       resultEl.style.display = "block";
       resultEl.innerHTML = `
         <h2>Total: $${total.toFixed(2)}</h2>
-        <div>Distance used: <strong>${usedDistance.toFixed(1)} mi</strong></div>
-        <div>Pallet equivalents: <strong>${palletEquivalents.toFixed(2)}</strong></div>
-        <div>Base fee: $${SETTINGS.baseFee.toFixed(2)}</div>
+        <div>Distance used: <strong>${usedDistance.toFixed(1)} mi</strong> (${distanceSource})</div>
+        <div>Pallets: <strong>${palletEquivalents.toFixed(0)}</strong></div>
         <div>Pallet charge: $${palletCharge.toFixed(2)}</div>
         <div>Distance surcharge: $${distanceSurcharge.toFixed(2)}</div>
+        <div>Subtotal (before minimum): $${subtotal.toFixed(2)}</div>
+        ${
+          minApplied
+            ? '<div><strong>Minimum delivery charge of $' +
+              SETTINGS.minDeliveryCharge.toFixed(2) +
+              ' applied.</strong></div>'
+            : ''
+        }
+        <div style="margin-top:8px;font-size:0.85rem;color:#555;">
+          Price is for curbside / dock delivery only. Unloading and inside delivery are not included.
+        </div>
       `;
     });
   </script>
