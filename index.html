@@ -147,7 +147,7 @@
       freeMiles: 5,
       ratePerExtraMile: 2,
       nycSurcharge: 80,           // Manhattan + all NYC boroughs + Long Island
-      noDockSurcharge: 10        // Applied when NO loading dock available
+      noDockSurcharge: 10         // Applied when NO loading dock available
     };
 
     const form = document.getElementById("priceForm");
@@ -271,7 +271,6 @@
         palletCharge +
         distanceSurcharge +
         nycSurcharge +
-        tollSurcharge +
         noDockSurcharge;
 
       resultEl.style.display = "block";
@@ -283,7 +282,6 @@
         <div class="result-row">Pallet charge: <strong>$${palletCharge.toFixed(2)}</strong></div>
         <div class="result-row">Distance surcharge: <strong>$${distanceSurcharge.toFixed(2)}</strong></div>
         <div class="result-row">NYC / Long Island surcharge: <strong>$${nycSurcharge.toFixed(2)}</strong></div>
-        <div class="result-row">Toll surcharge (non-NYC): <strong>$${tollSurcharge.toFixed(2)}</strong></div>
         <div class="result-row">No-dock surcharge: <strong>$${noDockSurcharge.toFixed(2)}</strong></div>
         <div class="result-row">Base trip fee: <strong>$${SETTINGS.baseFee.toFixed(2)}</strong></div>
       `;
